@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"knocker"
@@ -26,10 +27,10 @@ func main() {
 		IgnoreSSL: true,
 	}
 
-	statusCode, err := knocker.Knock2(door)
+	results, err := knocker.Knock(door)
 	failOnError(err, "failed to knock")
 
-	log.Printf("got status %d\n", statusCode)
+	fmt.Printf("%+v", results)
 
 }
 

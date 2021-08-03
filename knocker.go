@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -19,10 +20,19 @@ type Door struct {
 	IgnoreSSL bool
 }
 
-func Knock(d Door) (statusCode int, err error) {
+type Result struct {
+	DNS        []string
+	URL        string
+	Host       string
+	Header     http.Header
+	Body       []byte
+	StatusCode int
+}
+
+func Knock(d Door) (results []Result, err error) {
 	u, err := url.Parse(d.URL)
 	if err != nil {
-		return 0, fmt.Errorf("failed to Parse URL: %v", err)
+		return nil, fmt.Errorf("failed to Parse URL: %v", err)
 	}
 
 	// replace ip if specified
@@ -44,63 +54,81 @@ func Knock(d Door) (statusCode int, err error) {
 
 	request, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to http.NewRequest: %v", err)
+		return nil, fmt.Errorf("failed to http.NewRequest: %v", err)
 	}
 
 	t := &transport{}
 	trace := &httptrace.ClientTrace{
-		DNSDone: func(dnsInfo httptrace.DNSDoneInfo) {
-			printDebugHeader("DNS resoling...")
-			fmt.Printf("DNS resolve result: %+v\n", dnsInfo.Addrs)
-		},
-		GotConn: t.printConnInfo,
+		DNSDone: t.sniffDNSDoneInfo,
+		GotConn: t.sniffConnInfo,
 	}
 	request = request.WithContext(httptrace.WithClientTrace(request.Context(), trace))
 
 	client := &http.Client{Transport: t}
-	response, err := client.Do(request)
+	_, err = client.Do(request)
 	if err != nil {
-		return 0, fmt.Errorf("failed do a request: %v", err)
+		return nil, fmt.Errorf("failed do a request: %v", err)
 	}
 
-	printDebugHeader("request completed")
-
-	return response.StatusCode, nil
+	return t.results, nil
 }
 
 type transport struct {
-	current *http.Request
+	currentRequest *http.Request
+	currentLog     Result
+	results        []Result
 }
 
-func (t *transport) printConnInfo(info httptrace.GotConnInfo) {
-	// we can use request info here
-	printDebugHeader("GotConn")
-	fmt.Printf("request %s @ %s...\n", t.current.URL, info.Conn.RemoteAddr())
+func (t *transport) sniffDNSDoneInfo(info httptrace.DNSDoneInfo) {
+	var temp []string
+	for _, addr := range info.Addrs {
+		temp = append(temp, addr.String())
+	}
+	t.currentLog.DNS = temp
+}
+
+func (t *transport) sniffConnInfo(info httptrace.GotConnInfo) {
+	t.currentLog.URL = t.currentRequest.URL.String()
+	t.currentLog.Host = info.Conn.RemoteAddr().String()
 }
 
 func (t *transport) RoundTrip(request *http.Request) (*http.Response, error) {
-	t.current = request
+	t.currentRequest = request
 	resp, err := http.DefaultTransport.RoundTrip(request)
 	if err != nil {
 		log.Fatalf("transport.RoundTrip err: %v", err)
 	}
 
-	printDebugHeader("RoundTrip")
-	printStatusCode(resp.StatusCode)
-	printHeader(resp.Header)
+	t.currentLog.Header = resp.Header
+	bytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error on read response body: %v", err)
+	}
+	t.currentLog.Body = bytes
+	t.currentLog.StatusCode = resp.StatusCode
 
+	t.results = append(t.results, t.currentLog)
+	t.currentLog = Result{}
 	return resp, err
 }
-func printStatusCode(code int) {
+func PrintStatusCode(code int) {
 	fmt.Printf("Status Code: %d\n", code)
 }
 
-func printDebugHeader(msg string) {
+func PrintDebugHeader(msg string) {
 	fmt.Printf("\n### %s ###\n", msg)
 }
 
-func printHeader(header http.Header) {
+func PrintHeader(header http.Header) {
 	for k, value := range header {
 		fmt.Printf("%s: %s\n", k, strings.Join(value, " "))
 	}
+}
+
+func PrintRespBody(response *http.Response) {
+	bytes, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Printf("error on read response body: %v", err)
+	}
+	fmt.Printf("%s\n\n", bytes)
 }
