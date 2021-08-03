@@ -2,7 +2,9 @@ package knocker
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -11,29 +13,39 @@ import (
 	"time"
 )
 
-func Knock2(site, ip string, port int, withTrace bool) (statusCode int, err error) {
-	url, err := url.Parse(site)
+type Door struct {
+	URL       string
+	IPAddress string
+	Port      int
+	WithTrace bool
+	IgnoreSSL bool
+}
+
+//func Knock2(site, ip string, port int, withTrace, ignoreSSL bool) (statusCode int, err error) {
+func Knock2(d Door) (statusCode int, err error) {
+	url, err := url.Parse(d.URL)
 	if err != nil {
 		return 0, fmt.Errorf("failed to Parse URL: %v", err)
 	}
 
 	// replace ip only if specified
-	if ip != "" {
-		dialer := &net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}
-
+	if d.IPAddress != "" {
 		http.DefaultTransport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 			if addr == url.Host+":80" {
-				addr = ip + ":80"
+				addr = d.IPAddress + ":80"
 			}
 			if addr == url.Host+":443" {
-				addr = ip + ":443"
+				addr = d.IPAddress + ":443"
 			}
-
-			return dialer.DialContext(ctx, network, addr)
+			return (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext(ctx, network, addr)
 		}
+	}
+
+	if d.IgnoreSSL {
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	request, err := http.NewRequest(http.MethodGet, url.String(), nil)
@@ -42,7 +54,7 @@ func Knock2(site, ip string, port int, withTrace bool) (statusCode int, err erro
 	}
 
 	t := &transport{}
-	if withTrace {
+	if d.WithTrace {
 		trace := &httptrace.ClientTrace{
 			DNSDone: func(dnsInfo httptrace.DNSDoneInfo) {
 				printDebugHeader("DNS resoling...")
@@ -78,6 +90,9 @@ func (t *transport) printConnInfo(info httptrace.GotConnInfo) {
 func (t *transport) RoundTrip(request *http.Request) (*http.Response, error) {
 	t.current = request
 	resp, err := http.DefaultTransport.RoundTrip(request)
+	if err != nil {
+		log.Fatalf("transport.RoundTrip err: %v", err)
+	}
 
 	printDebugHeader("RoundTrip")
 	printStatusCode(resp.StatusCode)
