@@ -15,27 +15,21 @@ import (
 
 type Door struct {
 	URL       string
-	IPAddress string
-	Port      int
-	WithTrace bool
+	Host      string
 	IgnoreSSL bool
 }
 
-//func Knock2(site, ip string, port int, withTrace, ignoreSSL bool) (statusCode int, err error) {
-func Knock2(d Door) (statusCode int, err error) {
-	url, err := url.Parse(d.URL)
+func Knock(d Door) (statusCode int, err error) {
+	u, err := url.Parse(d.URL)
 	if err != nil {
 		return 0, fmt.Errorf("failed to Parse URL: %v", err)
 	}
 
-	// replace ip only if specified
-	if d.IPAddress != "" {
+	// replace ip if specified
+	if d.Host != "" {
 		http.DefaultTransport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if addr == url.Host+":80" {
-				addr = d.IPAddress + ":80"
-			}
-			if addr == url.Host+":443" {
-				addr = d.IPAddress + ":443"
+			if addr == u.Hostname()+":"+u.Port() {
+				addr = d.Host + ":" + u.Port()
 			}
 			return (&net.Dialer{
 				Timeout:   30 * time.Second,
@@ -48,25 +42,22 @@ func Knock2(d Door) (statusCode int, err error) {
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
-	request, err := http.NewRequest(http.MethodGet, url.String(), nil)
+	request, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
 		return 0, fmt.Errorf("failed to http.NewRequest: %v", err)
 	}
 
 	t := &transport{}
-	if d.WithTrace {
-		trace := &httptrace.ClientTrace{
-			DNSDone: func(dnsInfo httptrace.DNSDoneInfo) {
-				printDebugHeader("DNS resoling...")
-				fmt.Printf("DNS resolve result: %+v\n", dnsInfo.Addrs)
-			},
-			GotConn: t.printConnInfo,
-		}
-		request = request.WithContext(httptrace.WithClientTrace(request.Context(), trace))
+	trace := &httptrace.ClientTrace{
+		DNSDone: func(dnsInfo httptrace.DNSDoneInfo) {
+			printDebugHeader("DNS resoling...")
+			fmt.Printf("DNS resolve result: %+v\n", dnsInfo.Addrs)
+		},
+		GotConn: t.printConnInfo,
 	}
+	request = request.WithContext(httptrace.WithClientTrace(request.Context(), trace))
 
 	client := &http.Client{Transport: t}
-
 	response, err := client.Do(request)
 	if err != nil {
 		return 0, fmt.Errorf("failed do a request: %v", err)
