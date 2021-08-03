@@ -38,8 +38,8 @@ func Knock(d Door) (results []Result, err error) {
 	// replace ip if specified
 	if d.Host != "" {
 		http.DefaultTransport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if addr == u.Hostname()+":"+u.Port() {
-				addr = d.Host + ":" + u.Port()
+			if strings.HasPrefix(addr, u.Hostname()) {
+				addr = d.Host + strings.TrimPrefix(addr, u.Hostname())
 			}
 			return (&net.Dialer{
 				Timeout:   30 * time.Second,
