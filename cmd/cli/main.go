@@ -30,8 +30,7 @@ func main() {
 	results, err := knocker.Knock(door)
 	failOnError(err, "failed to knock")
 
-	fmt.Printf("%+v", results)
-
+	knocker.PrintResults(results, true)
 }
 
 func failOnError(err error, msg string) {

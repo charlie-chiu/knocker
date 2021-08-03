@@ -111,24 +111,24 @@ func (t *transport) RoundTrip(request *http.Request) (*http.Response, error) {
 	t.currentLog = Result{}
 	return resp, err
 }
-func PrintStatusCode(code int) {
-	fmt.Printf("Status Code: %d\n", code)
+
+func PrintResults(results []Result, withBody bool) {
+	for i, r := range results {
+		fmt.Printf("\nREQUEST %d\n", i+1)
+		fmt.Printf("DNS result: %s\n", r.DNS)
+		fmt.Printf("Request URL: %s\n", r.URL)
+		fmt.Printf("Request Host: %s\n", r.Host)
+		fmt.Printf("Status: %d\n", r.StatusCode)
+		printRespHeader(r.Header)
+		if withBody {
+			fmt.Printf("\nRequest Body:\n%s\n", r.Body)
+		}
+	}
 }
 
-func PrintDebugHeader(msg string) {
-	fmt.Printf("\n### %s ###\n", msg)
-}
-
-func PrintHeader(header http.Header) {
+func printRespHeader(header http.Header) {
+	fmt.Println("Header:")
 	for k, value := range header {
 		fmt.Printf("%s: %s\n", k, strings.Join(value, " "))
 	}
-}
-
-func PrintRespBody(response *http.Response) {
-	bytes, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		log.Printf("error on read response body: %v", err)
-	}
-	fmt.Printf("%s\n\n", bytes)
 }
