@@ -8,29 +8,33 @@ import (
 )
 
 func main() {
-	//default
+	//door := knocker.Door{
+	//	//URL: "https://daniu.cool",
+	//	URL:       "https://daniu.cool/admin/login/index.html",
+	//	Host:      "52.229.224.88",
+	//	IgnoreSSL: true,
+	//}
 
-	//rawURL := "http://daniu.cool/admin/login/index.html"
-	rawURL := "http://daniu.cool"
-	//rawURL := "https://image06.fenhao24.com/"
-	//modifiedIP := ""
-	//modifiedIP := "45.60.64.140"
-	modifiedIP := "52.229.224.88"
-	//modifiedIP := "1.1.1.1"
-	//port := 443
+	//door := knocker.Door{
+	//	URL:       "https://cdn.dev3x.club:22443",
+	//	//Host:      "",
+	//	IgnoreSSL: false,
+	//}
 
-	door := knocker.Door{
-		URL:       rawURL,
-		IPAddress: modifiedIP,
-		Port:      0,
-		WithTrace: false,
-		IgnoreSSL: true,
-	}
+	//door := knocker.Door{
+	//	URL: "https://image06.fenhao24.com/",
+	//	//IgnoreSSL: true,
+	//}
+
+	//door := knocker.Door{URL: "https://news.baidu.com"}
+	door := knocker.Door{URL: "https://leaidc.com"}
 
 	results, err := knocker.Knock(door)
-	failOnError(err, "failed to knock")
+	if err != nil {
+		fmt.Printf("knock error: %v", err)
+	}
 
-	knocker.PrintResults(results, true)
+	knocker.PrintResults(results, false)
 }
 
 func failOnError(err error, msg string) {
