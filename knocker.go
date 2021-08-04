@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -27,6 +26,7 @@ type Result struct {
 	Header     http.Header
 	Body       []byte
 	StatusCode int
+	Error      error
 }
 
 func Knock(d Door) (results []Result, err error) {
@@ -56,7 +56,7 @@ func Knock(d Door) (results []Result, err error) {
 
 	request, err := http.NewRequest(http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to http.NewRequest: %v", err)
+		return s.results, fmt.Errorf("failed to http.NewRequest: %v", err)
 	}
 	request = request.WithContext(httptrace.WithClientTrace(request.Context(), &httptrace.ClientTrace{
 		DNSDone: s.sniffDNSDoneInfo,
@@ -66,7 +66,7 @@ func Knock(d Door) (results []Result, err error) {
 	client := &http.Client{Transport: s}
 	_, err = client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed do a request: %v", err)
+		return s.results, fmt.Errorf("failed do a request: %v", err)
 	}
 
 	return s.results, nil
@@ -95,26 +95,40 @@ func (s *sniffer) RoundTrip(request *http.Request) (*http.Response, error) {
 	s.request = request
 	resp, err := http.DefaultTransport.RoundTrip(request)
 	if err != nil {
-		log.Fatalf("sniffer.RoundTrip err: %v", err)
+		s.result.Error = err
+		s.finishRequest()
+		return nil, err
 	}
 
-	s.result.Header = resp.Header
 	bytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("error on read response body: %v", err)
+		s.result.Error = err
+		s.finishRequest()
+		return nil, err
+	} else {
+		s.result.Body = bytes
+		resp.Body.Close()
 	}
-	defer resp.Body.Close()
-	s.result.Body = bytes
-	s.result.StatusCode = resp.StatusCode
 
+	s.result.StatusCode = resp.StatusCode
+	s.result.Header = resp.Header
+	s.finishRequest()
+	return resp, nil
+}
+
+func (s *sniffer) finishRequest() {
 	s.results = append(s.results, s.result)
 	s.result = Result{}
-	return resp, err
 }
 
 func PrintResults(results []Result, withBody bool) {
 	for i, r := range results {
 		fmt.Printf("\nREQUEST %d\n", i+1)
+		if r.Error != nil {
+			fmt.Printf("\n### ERROR ##\n")
+			fmt.Printf("%v", r.Error)
+			fmt.Printf("\n### ERROR ##\n")
+		}
 		fmt.Printf("DNS result: %s\n", strings.Join(r.DNS, ", "))
 		fmt.Printf("Request URL: %s\n", r.URL)
 		fmt.Printf("Request Host: %s\n", r.Host)
