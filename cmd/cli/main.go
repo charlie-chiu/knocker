@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"log"
 
-	"knocker"
+	"github.com/charlie-chiu/knocker"
 )
 
 func main() {
 	//door := knocker.Door{
 	//	//URL: "https://daniu.cool",
-	//	URL:       "https://daniu.cool/admin/login/index.html",
-	//	Host:      "52.229.224.88",
+	//	URL:       "http://daniu.cool/admin/login/index.html",
+	//	//Host:      "52.229.224.88",
 	//	IgnoreSSL: true,
 	//}
 
@@ -27,14 +27,17 @@ func main() {
 	//}
 
 	//door := knocker.Door{URL: "https://news.baidu.com"}
-	door := knocker.Door{URL: "https://leaidc.com"}
+	door := knocker.Door{
+		URL:       "https://ws-gb.cqgame.games",
+		IgnoreSSL: true,
+	}
 
 	results, err := knocker.Knock(door)
 	if err != nil {
 		fmt.Printf("knock error: %v", err)
 	}
 
-	knocker.PrintResults(results, false)
+	knocker.PrintResults(results, true)
 }
 
 func failOnError(err error, msg string) {
