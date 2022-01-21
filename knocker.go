@@ -29,7 +29,7 @@ type Result struct {
 	Error      error
 }
 
-func Knock(d Door) (results []Result, err error) {
+func Knock(ctx context.Context, d Door) (results []Result, err error) {
 	u, err := url.Parse(d.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to Parse URL: %v", err)
@@ -54,7 +54,8 @@ func Knock(d Door) (results []Result, err error) {
 
 	s := &sniffer{}
 
-	request, err := http.NewRequest(http.MethodGet, u.String(), http.NoBody)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
+
 	if err != nil {
 		return s.results, fmt.Errorf("failed to http.NewRequest: %v", err)
 	}
