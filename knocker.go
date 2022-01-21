@@ -35,30 +35,21 @@ func Knock(ctx context.Context, d Door) (results []Result, err error) {
 		return nil, fmt.Errorf("failed to Parse URL: %v", err)
 	}
 
-	// replace addr if specified
+	s := &sniffer{}
+
 	if d.Host != "" {
-		http.DefaultTransport.(*http.Transport).DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if strings.HasPrefix(addr, u.Hostname()) {
-				addr = d.Host + strings.TrimPrefix(addr, u.Hostname())
-			}
-			return (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext(ctx, network, addr)
-		}
+		s.setAddress(d.Host, u)
 	}
 
 	if d.IgnoreSSL {
-		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		s.Transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
-	s := &sniffer{}
-
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
-
 	if err != nil {
 		return s.results, fmt.Errorf("failed to http.NewRequest: %v", err)
 	}
+
 	request = request.WithContext(httptrace.WithClientTrace(request.Context(), &httptrace.ClientTrace{
 		DNSDone: s.sniffDNSDoneInfo,
 		GotConn: s.sniffConnInfo,
@@ -74,27 +65,15 @@ func Knock(ctx context.Context, d Door) (results []Result, err error) {
 }
 
 type sniffer struct {
-	request *http.Request
-	result  Result
-	results []Result
-}
-
-func (s *sniffer) sniffDNSDoneInfo(info httptrace.DNSDoneInfo) {
-	var temp []string
-	for _, addr := range info.Addrs {
-		temp = append(temp, addr.String())
-	}
-	s.result.DNS = temp
-}
-
-func (s *sniffer) sniffConnInfo(info httptrace.GotConnInfo) {
-	s.result.URL = s.request.URL.String()
-	s.result.Host = info.Conn.RemoteAddr().String()
+	request   *http.Request
+	result    Result
+	results   []Result
+	Transport http.Transport
 }
 
 func (s *sniffer) RoundTrip(request *http.Request) (*http.Response, error) {
 	s.request = request
-	resp, err := http.DefaultTransport.RoundTrip(request)
+	resp, err := s.Transport.RoundTrip(request)
 	if err != nil {
 		s.result.Error = err
 		s.finishRequest()
@@ -115,6 +94,31 @@ func (s *sniffer) RoundTrip(request *http.Request) (*http.Response, error) {
 	s.result.Header = resp.Header
 	s.finishRequest()
 	return resp, nil
+}
+
+func (s *sniffer) setAddress(host string, u *url.URL) {
+	s.Transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if strings.HasPrefix(addr, u.Hostname()) {
+			addr = host + strings.TrimPrefix(addr, u.Hostname())
+		}
+		return (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext(ctx, network, addr)
+	}
+}
+
+func (s *sniffer) sniffDNSDoneInfo(info httptrace.DNSDoneInfo) {
+	var temp []string
+	for _, addr := range info.Addrs {
+		temp = append(temp, addr.String())
+	}
+	s.result.DNS = temp
+}
+
+func (s *sniffer) sniffConnInfo(info httptrace.GotConnInfo) {
+	s.result.URL = s.request.URL.String()
+	s.result.Host = info.Conn.RemoteAddr().String()
 }
 
 func (s *sniffer) finishRequest() {
